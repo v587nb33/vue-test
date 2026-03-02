@@ -5,7 +5,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 // 开发环境使用本机IP，生产环境（Docker）使用相对路径
 const WS_URL = import.meta.env.DEV 
     ? 'ws://192.168.121.104:5680/ws' 
-    : 'ws://127.0.0.1:80/ws';
+    : '/ws';
 // 初始化8个生产线列表（可根据实际名称修改）
 const allWorkshops = [
     "A", "B", "C", "D",
