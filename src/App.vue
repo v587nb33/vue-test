@@ -82,11 +82,9 @@ function startCountdown() {
         clearInterval(countdownInterval);
     }
     countdownInterval = window.setInterval(() => {
-        let hasActiveCountdown = false;
         for (const [workshopId, info] of Object.entries(workshopStatusCache.value)) {
             if (info.isStop === '是' && info.stopSeconds > 0) {
                 info.stopSeconds--;
-                hasActiveCountdown = true;
                 // 当倒计时结束时，标记为已停机
                 if (info.stopSeconds === 0) {
                     info.updateTime = new Date().toLocaleString();
@@ -101,13 +99,6 @@ function startCountdown() {
                         ws.send(JSON.stringify(updateData));
                     }
                 }
-            }
-        }
-        // 如果所有倒计时都结束了，停止定时器
-        if (!hasActiveCountdown) {
-            if (countdownInterval) {
-                clearInterval(countdownInterval);
-                countdownInterval = null;
             }
         }
     }, 1000); // 每秒更新一次
