@@ -15,6 +15,7 @@ COPY src ./src
 COPY index.html .
 COPY vite.config.ts .
 COPY tsconfig*.json .
+COPY env.d.ts .
 
 # 构建
 RUN npm run build

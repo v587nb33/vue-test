@@ -73,7 +73,7 @@ function initWebSocket() {
 
     // 连接错误
     ws.onerror = function(error) {
-        connStatus.value = { connected: false, message: '连接出错：' + (error as Error).message };
+        connStatus.value = { connected: false, message: '连接出错：' + (error as Event).type };
     };
 }
 
@@ -209,7 +209,7 @@ onMounted(() => {
 
     // 从URL参数获取当前上报的车间
     const params = new URLSearchParams(window.location.search);
-    currentReportWorkshop.value = params.get('workshop') || allWorkshops[0];
+    currentReportWorkshop.value = params.get('workshop') || allWorkshops[0] || '';
 
     // 初始化WebSocket连接
     initWebSocket();
