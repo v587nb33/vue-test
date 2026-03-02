@@ -15,6 +15,7 @@ const workshopStatusCache = ref<Record<string, { isStop: string; stopSeconds: nu
 const currentReportWorkshop = ref('');
 const stopMinutes = ref(30); // 默认30分钟
 const connStatus = ref({ connected: false, message: '未连接到服务器' });
+const hasUrlParam = ref(false); // 是否有URL参数
 
 // 格式化秒数为时分秒
 function formatTime(totalSeconds: number): string {
@@ -207,7 +208,9 @@ onMounted(() => {
 
     // 从URL参数获取当前上报的车间
     const params = new URLSearchParams(window.location.search);
-    currentReportWorkshop.value = params.get('workshop') || allWorkshops[0] || '';
+    const workshopParam = params.get('workshop');
+    hasUrlParam.value = !!workshopParam;
+    currentReportWorkshop.value = workshopParam || '';
 
     // 初始化WebSocket连接
     initWebSocket();
@@ -261,8 +264,8 @@ onUnmounted(() => {
             </div>
         </div>
 
-        <!-- 右侧：当前车间快速上报 -->
-        <div class="report-section">
+        <!-- 右侧：当前车间快速上报（仅当有URL参数时显示） -->
+        <div v-if="hasUrlParam" class="report-section">
            
             <!-- 当前车间显示（URL参数自动绑定） -->
             <div class="current-workshop">
