@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import os
+import pymysql
 from datetime import datetime
 from typing import Dict, Set
 import websockets
@@ -10,6 +12,16 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
+# 从环境变量读取MySQL数据库配置
+DB_CONFIG = {
+    'host': os.environ.get('MYSQL_HOST', '远程MySQL服务器IP'),  # 数据库主机
+    'user': os.environ.get('MYSQL_USER', 'root'),  # 数据库用户
+    'password': os.environ.get('MYSQL_PASSWORD', 'password'),  # 数据库密码
+    'db': os.environ.get('MYSQL_DATABASE', 'workshop_db'),  # 数据库名称
+    'charset': 'utf8mb4',
+    'cursorclass': pymysql.cursors.DictCursor
+}
 
 connected_clients: Set[WebSocketServerProtocol] = set()
 
@@ -28,6 +40,82 @@ for name in workshop_names:
         "reportTimestamp": None,  # 上报时间戳（秒）
         "reportTimeStr": "未更新"  # 上报时间字符串
     }
+
+
+def init_database():
+    """初始化数据库表"""
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        with conn.cursor() as cursor:
+            # 创建车间状态表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS workshop_status (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                workshop_id VARCHAR(10) NOT NULL UNIQUE,
+                is_stop VARCHAR(5) NOT NULL,
+                original_minutes INT NOT NULL DEFAULT 0,
+                report_timestamp INT,
+                report_time_str VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ''')
+            conn.commit()
+        conn.close()
+        logging.info("数据库初始化完成")
+    except Exception as e:
+        logging.error(f"数据库初始化失败: {e}")
+
+
+def load_status_from_db():
+    """从数据库加载状态"""
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM workshop_status")
+            results = cursor.fetchall()
+            for row in results:
+                workshop_status[row['workshop_id']] = {
+                    "workshopId": row['workshop_id'],
+                    "isStop": row['is_stop'],
+                    "originalMinutes": row['original_minutes'],
+                    "reportTimestamp": row['report_timestamp'],
+                    "reportTimeStr": row['report_time_str']
+                }
+        conn.close()
+        logging.info("从数据库加载状态完成")
+    except Exception as e:
+        logging.error(f"从数据库加载状态失败: {e}")
+
+
+def save_status_to_db(workshop_id: str, status: dict):
+    """保存状态到数据库"""
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        with conn.cursor() as cursor:
+            # 使用UPSERT操作
+            sql = '''
+            INSERT INTO workshop_status 
+            (workshop_id, is_stop, original_minutes, report_timestamp, report_time_str)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+            is_stop = VALUES(is_stop),
+            original_minutes = VALUES(original_minutes),
+            report_timestamp = VALUES(report_timestamp),
+            report_time_str = VALUES(report_time_str)
+            '''
+            cursor.execute(sql, (
+                workshop_id,
+                status['isStop'],
+                status['originalMinutes'],
+                status['reportTimestamp'],
+                status['reportTimeStr']
+            ))
+            conn.commit()
+        conn.close()
+        logging.info(f"状态保存到数据库: {workshop_id}")
+    except Exception as e:
+        logging.error(f"保存状态到数据库失败: {e}")
 
 
 def calculate_remaining_seconds(status: dict) -> int:
@@ -110,6 +198,9 @@ async def handle_message(websocket: WebSocketServerProtocol, message_str: str):
                 "reportTimeStr": report_time_str
             }
             
+            # 保存到数据库
+            save_status_to_db(workshop_id, workshop_status[workshop_id])
+            
             # 广播时返回剩余时间
             broadcast_data = get_status_with_remaining(workshop_status[workshop_id])
             await broadcast_message(broadcast_data, exclude_client=websocket)
@@ -150,6 +241,11 @@ async def handle_client(websocket: WebSocketServerProtocol, path: str = None):
 
 async def main():
     """启动WebSocket服务器"""
+    # 初始化数据库
+    init_database()
+    # 从数据库加载状态
+    load_status_from_db()
+    
     host = "0.0.0.0"
     port = 5680
     

@@ -1,5 +1,9 @@
 version: '3.8'
 
+# 使用环境变量文件（可选）
+env_file:
+  - .env
+
 services:
   # 前端服务（Nginx + 前端静态文件）
   frontend:
@@ -21,6 +25,11 @@ services:
       dockerfile: Dockerfile.backend
     ports:
       - "5680:5680"
+    environment:
+      - MYSQL_HOST=${MYSQL_HOST:-远程MySQL服务器IP}
+      - MYSQL_USER=${MYSQL_USER:-root}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-password}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-workshop_db}
     restart: unless-stopped
     networks:
       - app-network
