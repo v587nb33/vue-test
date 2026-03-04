@@ -35,7 +35,7 @@ workshop_names = ["A", "B", "C", "D",
 for name in workshop_names:
     workshop_status[name] = {
         "workshopId": name,
-        "isStop": "否",
+        "isStop": False,  # 使用布尔值
         "originalMinutes": 0,  # 原始停机时长（分钟）
         "reportTimestamp": None,  # 上报时间戳（秒）
         "reportTimeStr": "未更新"  # 上报时间字符串
@@ -52,7 +52,7 @@ def init_database():
             CREATE TABLE IF NOT EXISTS workshop_status (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 workshop_id VARCHAR(10) NOT NULL UNIQUE,
-                is_stop VARCHAR(5) NOT NULL,
+                is_stop TINYINT(1) NOT NULL DEFAULT 0,
                 original_minutes INT NOT NULL DEFAULT 0,
                 report_timestamp INT,
                 report_time_str VARCHAR(50),
@@ -66,7 +66,7 @@ def init_database():
             CREATE TABLE IF NOT EXISTS workshop_history (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 workshop_id VARCHAR(10) NOT NULL,
-                is_stop VARCHAR(5) NOT NULL,
+                is_stop TINYINT(1) NOT NULL DEFAULT 0,
                 original_minutes INT NOT NULL DEFAULT 0,
                 report_timestamp INT,
                 report_time_str VARCHAR(50),
@@ -92,7 +92,7 @@ def load_status_from_db():
             for row in results:
                 workshop_status[row['workshop_id']] = {
                     "workshopId": row['workshop_id'],
-                    "isStop": row['is_stop'],
+                    "isStop": bool(row['is_stop']),  
                     "originalMinutes": row['original_minutes'],
                     "reportTimestamp": row['report_timestamp'],
                     "reportTimeStr": row['report_time_str']
@@ -159,7 +159,7 @@ def save_history_to_db(workshop_id: str, status: dict):
 
 def calculate_remaining_seconds(status: dict) -> int:
     """计算剩余秒数"""
-    if status["isStop"] != "是":
+    if not status["isStop"]:  # 使用布尔值判断
         return 0
     
     if status["reportTimestamp"] is None:
@@ -182,10 +182,10 @@ def get_status_with_remaining(status: dict) -> dict:
     remaining_seconds = calculate_remaining_seconds(status)
     
     # 如果剩余时间为0且原本是停机状态，标记为已停机（stopMinutes=0）
-    if remaining_seconds == 0 and status["isStop"] == "是":
+    if remaining_seconds == 0 and status["isStop"]:
         return {
             "workshopId": status["workshopId"],
-            "isStop": "是",
+            "isStop": True,
             "stopMinutes": 0,  # 0表示已停机
             "reportTime": status["reportTimeStr"]
         }

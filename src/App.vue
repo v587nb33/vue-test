@@ -11,7 +11,7 @@ const allWorkshops = [
 ];
 
 // 响应式数据
-const workshopStatusCache = ref<Record<string, { isStop: string; stopSeconds: number; updateTime: string }>>({});
+const workshopStatusCache = ref<Record<string, { isStop: boolean; stopSeconds: number; updateTime: string }>>({});
 const currentReportWorkshop = ref('');
 const stopMinutes = ref(30); // 默认30分钟
 const connStatus = ref({ connected: false, message: '未连接到服务器' });
@@ -83,7 +83,7 @@ function startCountdown() {
     }
     countdownInterval = window.setInterval(() => {
         for (const [workshopId, info] of Object.entries(workshopStatusCache.value)) {
-            if (info.isStop === '是' && info.stopSeconds > 0) {
+            if (info.isStop === true && info.stopSeconds > 0) {
                 info.stopSeconds--;
                 // 当倒计时结束时，标记为已停机
                 if (info.stopSeconds === 0) {
@@ -92,7 +92,7 @@ function startCountdown() {
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         const updateData = {
                             workshopId: workshopId,
-                            isStop: '是',
+                            isStop: true,
                             stopMinutes: 0,
                             reportTime: info.updateTime
                         };
@@ -130,7 +130,7 @@ function reportStatus() {
     // 构造上报数据
     const reportData = {
         workshopId: currentReportWorkshop.value,
-        isStop: '是', // 默认上报停机
+        isStop: true, // 默认上报停机
         stopMinutes: minutes,
         reportTime: new Date().toLocaleString()
     };
@@ -144,7 +144,7 @@ function reportStatus() {
     
     // 本地实时更新看板（无需等广播）
     workshopStatusCache.value[currentReportWorkshop.value] = {
-        isStop: '是',
+        isStop: true,
         stopSeconds: seconds,
         updateTime: reportData.reportTime
     };
@@ -167,7 +167,7 @@ function reportStart() {
     // 构造上报数据
     const reportData = {
         workshopId: currentReportWorkshop.value,
-        isStop: '否',
+        isStop: false,
         stopMinutes: 0,
         reportTime: new Date().toLocaleString()
     };
@@ -180,7 +180,7 @@ function reportStart() {
     
     // 本地实时更新看板（无需等广播）
     workshopStatusCache.value[currentReportWorkshop.value] = {
-        isStop: '否',
+        isStop: false,
         stopSeconds: 0,
         updateTime: reportData.reportTime
     };
@@ -191,7 +191,7 @@ onMounted(() => {
     // 初始化空缓存，等待服务端发送状态
     allWorkshops.forEach(workshop => {
         workshopStatusCache.value[workshop] = {
-            isStop: "否",
+            isStop: false,
             stopSeconds: 0,
             updateTime: "等待服务端同步..."
         };
@@ -231,14 +231,14 @@ onUnmounted(() => {
                     :key="workshopId"
                     :class="[
                         'board-item', 
-                        info.isStop === '是' 
+                        info.isStop 
                             ? (info.stopSeconds > 0 ? 'board-yes' : 'board-stopped') 
                             : 'board-no'
                     ]"
                 >
                     <span>{{ getDisplayName(workshopId) }}</span>
                     <div class="board-subtitle">
-                        <span v-if="info.isStop === '是'">
+                        <span v-if="info.isStop">
                             <span v-if="info.stopSeconds > 0">
                                 距离停机还有{{ formatTime(info.stopSeconds) }}
                             </span>

@@ -1,9 +1,5 @@
 version: '3.8'
 
-# 使用环境变量文件（可选）
-env_file:
-  - .env
-
 services:
   # 前端服务（Nginx + 前端静态文件）
   frontend:
