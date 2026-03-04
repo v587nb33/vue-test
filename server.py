@@ -60,6 +60,21 @@ def init_database():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             ''')
+            
+            # 创建提交历史记录表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS workshop_history (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                workshop_id VARCHAR(10) NOT NULL,
+                is_stop VARCHAR(5) NOT NULL,
+                original_minutes INT NOT NULL DEFAULT 0,
+                report_timestamp INT,
+                report_time_str VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_workshop_id (workshop_id),
+                INDEX idx_created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ''')
             conn.commit()
         conn.close()
         logging.info("数据库初始化完成")
@@ -116,6 +131,30 @@ def save_status_to_db(workshop_id: str, status: dict):
         logging.info(f"状态保存到数据库: {workshop_id}")
     except Exception as e:
         logging.error(f"保存状态到数据库失败: {e}")
+
+
+def save_history_to_db(workshop_id: str, status: dict):
+    """保存提交历史记录到数据库"""
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        with conn.cursor() as cursor:
+            sql = '''
+            INSERT INTO workshop_history 
+            (workshop_id, is_stop, original_minutes, report_timestamp, report_time_str)
+            VALUES (%s, %s, %s, %s, %s)
+            '''
+            cursor.execute(sql, (
+                workshop_id,
+                status['isStop'],
+                status['originalMinutes'],
+                status['reportTimestamp'],
+                status['reportTimeStr']
+            ))
+            conn.commit()
+        conn.close()
+        logging.info(f"历史记录保存到数据库: {workshop_id}")
+    except Exception as e:
+        logging.error(f"保存历史记录到数据库失败: {e}")
 
 
 def calculate_remaining_seconds(status: dict) -> int:
@@ -198,8 +237,11 @@ async def handle_message(websocket: WebSocketServerProtocol, message_str: str):
                 "reportTimeStr": report_time_str
             }
             
-            # 保存到数据库
+            # 保存到数据库（最新状态）
             save_status_to_db(workshop_id, workshop_status[workshop_id])
+            
+            # 保存到历史记录表（每一次提交）
+            save_history_to_db(workshop_id, workshop_status[workshop_id])
             
             # 广播时返回剩余时间
             broadcast_data = get_status_with_remaining(workshop_status[workshop_id])
