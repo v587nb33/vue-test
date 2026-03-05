@@ -11,27 +11,13 @@ const allWorkshops = [
 ];
 
 // 响应式数据
-const workshopStatusCache = ref<Record<string, { isStop: boolean; stopSeconds: number; updateTime: string }>>({});
+const workshopStatusCache = ref<Record<string, { isStop: boolean; stopMinutes: number; stopSeconds: number; updateTime: string }>>({});
 const currentReportWorkshop = ref('');
 const stopMinutes = ref(30); // 默认30分钟
 const connStatus = ref({ connected: false, message: '未连接到服务器' });
 const hasUrlParam = ref(false); // 是否有URL参数
 
-// 格式化秒数为时分秒
-function formatTime(totalSeconds: number): string {
-    if (totalSeconds <= 0) return '0秒';
-    
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    
-    const parts: string[] = [];
-    if (hours > 0) parts.push(`${hours}小时`);
-    if (minutes > 0) parts.push(`${minutes}分`);
-    if (seconds > 0 || parts.length === 0) parts.push(`${seconds}秒`);
-    
-    return parts.join('');
-}
+
 
 // 转换显示名称（A -> 生产线A）
 function getDisplayName(code: string): string {
@@ -54,12 +40,13 @@ function initWebSocket() {
     // 接收广播消息（更新看板）
     ws.onmessage = function(e) {
         const data = JSON.parse(e.data);
-        // 服务端直接返回秒数，直接使用
-        const seconds = data.stopMinutes || 0;
-        // 更新缓存
+        // 服务端返回分钟数
+        const minutes = data.stopMinutes || 0;
+        // 更新缓存，秒数初始化为0
         workshopStatusCache.value[data.workshopId] = {
             isStop: data.isStop,
-            stopSeconds: seconds,
+            stopMinutes: minutes,
+            stopSeconds: 0,
             updateTime: data.reportTime || new Date().toLocaleString()
         };
     };
@@ -83,20 +70,25 @@ function startCountdown() {
     }
     countdownInterval = window.setInterval(() => {
         for (const [workshopId, info] of Object.entries(workshopStatusCache.value)) {
-            if (info.isStop === true && info.stopSeconds > 0) {
-                info.stopSeconds--;
-                // 当倒计时结束时，标记为已停机
-                if (info.stopSeconds === 0) {
-                    info.updateTime = new Date().toLocaleString();
-                    // 发送到服务器
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        const updateData = {
-                            workshopId: workshopId,
-                            isStop: true,
-                            stopMinutes: 0,
-                            reportTime: info.updateTime
-                        };
-                        ws.send(JSON.stringify(updateData));
+            if (info.isStop === true && info.stopMinutes > 0) {
+                info.stopSeconds++;
+                // 当秒数达到60时，分钟减1，秒数归零
+                if (info.stopSeconds >= 60) {
+                    info.stopSeconds = 0;
+                    info.stopMinutes--;
+                    // 当倒计时结束时，标记为已停机
+                    if (info.stopMinutes === 0) {
+                        info.updateTime = new Date().toLocaleString();
+                        // 发送到服务器
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            const updateData = {
+                                workshopId: workshopId,
+                                isStop: true,
+                                stopMinutes: 0,
+                                reportTime: info.updateTime
+                            };
+                            ws.send(JSON.stringify(updateData));
+                        }
                     }
                 }
             }
@@ -124,8 +116,7 @@ function reportStatus() {
         }
     }
 
-    // 将分钟转换为秒数
-    const seconds = minutes * 60;
+
     
     // 构造上报数据
     const reportData = {
@@ -139,7 +130,7 @@ function reportStatus() {
     ws.send(JSON.stringify(reportData));
     
     // 友好提示（仅表示已发送，实际状态等广播）
-    const tipMsg = `✅ 已提交！\n车间：${getDisplayName(currentReportWorkshop.value)}\n今日计划停机\n剩余时长：${minutes}分钟（${seconds}秒）\n时间：${reportData.reportTime}`;
+    const tipMsg = `✅ 已提交！\n车间：${getDisplayName(currentReportWorkshop.value)}\n今日计划停机\n剩余时长：${minutes}分钟\n时间：${reportData.reportTime}`;
     alert(tipMsg);
 
     // 重置表单
@@ -175,6 +166,7 @@ onMounted(() => {
     allWorkshops.forEach(workshop => {
         workshopStatusCache.value[workshop] = {
             isStop: false,
+            stopMinutes: 0,
             stopSeconds: 0,
             updateTime: "等待服务端同步..."
         };
@@ -215,15 +207,15 @@ onUnmounted(() => {
                     :class="[
                         'board-item', 
                         info.isStop 
-                            ? (info.stopSeconds > 0 ? 'board-yes' : 'board-stopped') 
+                            ? (info.stopMinutes > 0 ? 'board-yes' : 'board-stopped') 
                             : 'board-no'
                     ]"
                 >
                     <span>{{ getDisplayName(workshopId) }}</span>
                     <div class="board-subtitle">
                         <span v-if="info.isStop">
-                            <span v-if="info.stopSeconds > 0">
-                                距离停机还有{{ formatTime(info.stopSeconds) }}
+                            <span v-if="info.stopMinutes > 0">
+                                距离停机还有{{ info.stopMinutes }}分{{ info.stopSeconds }}秒
                             </span>
                             <span v-else>
                                 已停机

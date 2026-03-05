@@ -167,32 +167,32 @@ def save_history_to_db(workshop_id: str, status: dict, hostname: str = None, mac
         logging.error(f"保存历史记录到数据库失败: {e}")
 
 
-def calculate_remaining_seconds(status: dict) -> int:
-    """计算剩余秒数"""
+def calculate_remaining_minutes(status: dict) -> int:
+    """计算剩余分钟数"""
     if not status["isStop"]:  # 使用布尔值判断
         return 0
     
     if status["reportTimestamp"] is None:
         return 0
     
-    # 原始时长（秒）
-    original_seconds = status["originalMinutes"] * 60
+    # 原始时长（分钟）
+    original_minutes = status["originalMinutes"]
     
-    # 已经过去的时间（秒）
-    elapsed_seconds = int(datetime.now().timestamp()) - status["reportTimestamp"]
+    # 已经过去的时间（分钟）
+    elapsed_minutes = (int(datetime.now().timestamp()) - status["reportTimestamp"]) // 60
     
     # 剩余时间
-    remaining = original_seconds - elapsed_seconds
+    remaining = original_minutes - elapsed_minutes
     
     return max(0, remaining)  # 不小于0
 
 
 def get_status_with_remaining(status: dict) -> dict:
-    """获取包含剩余秒数的状态"""
-    remaining_seconds = calculate_remaining_seconds(status)
+    """获取包含剩余分钟数的状态"""
+    remaining_minutes = calculate_remaining_minutes(status)
     
     # 如果剩余时间为0且原本是停机状态，标记为已停机（stopMinutes=0）
-    if remaining_seconds == 0 and status["isStop"]:
+    if remaining_minutes == 0 and status["isStop"]:
         return {
             "workshopId": status["workshopId"],
             "isStop": True,
@@ -200,11 +200,11 @@ def get_status_with_remaining(status: dict) -> dict:
             "reportTime": status["reportTimeStr"]
         }
     else:
-        # 返回剩余秒数（不再转换为分钟）
+        # 返回剩余分钟数
         return {
             "workshopId": status["workshopId"],
             "isStop": status["isStop"],
-            "stopMinutes": remaining_seconds,  # 直接返回秒数
+            "stopMinutes": remaining_minutes,  # 返回分钟数
             "reportTime": status["reportTimeStr"]
         }
 
