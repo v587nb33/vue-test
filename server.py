@@ -56,6 +56,8 @@ def init_database():
                 original_minutes INT NOT NULL DEFAULT 0,
                 report_timestamp INT,
                 report_time_str VARCHAR(50),
+                hostname VARCHAR(100),
+                mac_address VARCHAR(50),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -70,6 +72,8 @@ def init_database():
                 original_minutes INT NOT NULL DEFAULT 0,
                 report_timestamp INT,
                 report_time_str VARCHAR(50),
+                hostname VARCHAR(100),
+                mac_address VARCHAR(50),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 INDEX idx_workshop_id (workshop_id),
                 INDEX idx_created_at (created_at)
@@ -103,7 +107,7 @@ def load_status_from_db():
         logging.error(f"从数据库加载状态失败: {e}")
 
 
-def save_status_to_db(workshop_id: str, status: dict):
+def save_status_to_db(workshop_id: str, status: dict, hostname: str = None, mac_address: str = None):
     """保存状态到数据库"""
     try:
         conn = pymysql.connect(**DB_CONFIG)
@@ -111,20 +115,24 @@ def save_status_to_db(workshop_id: str, status: dict):
             # 使用UPSERT操作
             sql = '''
             INSERT INTO workshop_status 
-            (workshop_id, is_stop, original_minutes, report_timestamp, report_time_str)
-            VALUES (%s, %s, %s, %s, %s)
+            (workshop_id, is_stop, original_minutes, report_timestamp, report_time_str, hostname, mac_address)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
             is_stop = VALUES(is_stop),
             original_minutes = VALUES(original_minutes),
             report_timestamp = VALUES(report_timestamp),
-            report_time_str = VALUES(report_time_str)
+            report_time_str = VALUES(report_time_str),
+            hostname = VALUES(hostname),
+            mac_address = VALUES(mac_address)
             '''
             cursor.execute(sql, (
                 workshop_id,
                 status['isStop'],
                 status['originalMinutes'],
                 status['reportTimestamp'],
-                status['reportTimeStr']
+                status['reportTimeStr'],
+                hostname,
+                mac_address
             ))
             conn.commit()
         conn.close()
@@ -133,22 +141,24 @@ def save_status_to_db(workshop_id: str, status: dict):
         logging.error(f"保存状态到数据库失败: {e}")
 
 
-def save_history_to_db(workshop_id: str, status: dict):
+def save_history_to_db(workshop_id: str, status: dict, hostname: str = None, mac_address: str = None):
     """保存提交历史记录到数据库"""
     try:
         conn = pymysql.connect(**DB_CONFIG)
         with conn.cursor() as cursor:
             sql = '''
             INSERT INTO workshop_history 
-            (workshop_id, is_stop, original_minutes, report_timestamp, report_time_str)
-            VALUES (%s, %s, %s, %s, %s)
+            (workshop_id, is_stop, original_minutes, report_timestamp, report_time_str, hostname, mac_address)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             '''
             cursor.execute(sql, (
                 workshop_id,
                 status['isStop'],
                 status['originalMinutes'],
                 status['reportTimestamp'],
-                status['reportTimeStr']
+                status['reportTimeStr'],
+                hostname,
+                mac_address
             ))
             conn.commit()
         conn.close()
@@ -224,8 +234,10 @@ async def handle_message(websocket: WebSocketServerProtocol, message_str: str):
         is_stop = data.get("isStop")
         stop_minutes = data.get("stopMinutes", 0)
         report_time_str = data.get("reportTime", datetime.now().strftime("%Y/%m/%d %H:%M:%S"))
+        hostname = data.get("hostname")
+        mac_address = data.get("macAddress")
         
-        logging.info(f"收到消息: 车间={workshop_id}, 是否停机={is_stop}, 停机时长={stop_minutes}分钟")
+        logging.info(f"收到消息: 车间={workshop_id}, 是否停机={is_stop}, 停机时长={stop_minutes}分钟, 主机名={hostname}, MAC={mac_address}")
         
         if workshop_id:
             # 存储原始数据
@@ -238,14 +250,14 @@ async def handle_message(websocket: WebSocketServerProtocol, message_str: str):
             }
             
             # 保存到数据库（最新状态）
-            save_status_to_db(workshop_id, workshop_status[workshop_id])
+            save_status_to_db(workshop_id, workshop_status[workshop_id], hostname, mac_address)
             
             # 保存到历史记录表（每一次提交）
-            save_history_to_db(workshop_id, workshop_status[workshop_id])
+            save_history_to_db(workshop_id, workshop_status[workshop_id], hostname, mac_address)
             
-            # 广播时返回剩余时间
+            # 广播时返回剩余时间（包含原始客户端）
             broadcast_data = get_status_with_remaining(workshop_status[workshop_id])
-            await broadcast_message(broadcast_data, exclude_client=websocket)
+            await broadcast_message(broadcast_data)
             
             logging.info(f"更新车间状态: {workshop_id} -> {is_stop}, 剩余{stop_minutes}分钟")
         

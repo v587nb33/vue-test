@@ -38,6 +38,50 @@ function getDisplayName(code: string): string {
     return `生产线${code}`;
 }
 
+// 获取本机信息（IP地址）
+async function getLocalInfo() {
+    const hostname = window.location.hostname;
+    let macAddress = 'unknown';
+    
+    // 尝试通过WebRTC获取本地IP
+    try {
+        const pc = new RTCPeerConnection({ iceServers: [] });
+        pc.createDataChannel('');
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        return new Promise((resolve) => {
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    const match = event.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
+                    if (match) {
+                        pc.close();
+                        resolve({
+                            hostname: hostname,
+                            macAddress: macAddress,
+                            ipAddress: match[1]
+                        });
+                    }
+                }
+            };
+            setTimeout(() => {
+                pc.close();
+                resolve({
+                    hostname: hostname,
+                    macAddress: macAddress,
+                    ipAddress: 'unknown'
+                });
+            }, 1000);
+        });
+    } catch (error) {
+        return {
+            hostname: hostname,
+            macAddress: macAddress,
+            ipAddress: 'unknown'
+        };
+    }
+}
+
 // WebSocket连接
 let ws: WebSocket | null = null;
 let countdownInterval: number | null = null;
@@ -77,11 +121,11 @@ function initWebSocket() {
 }
 
 // 启动倒计时
-function startCountdown() {
+async function startCountdown() {
     if (countdownInterval) {
         clearInterval(countdownInterval);
     }
-    countdownInterval = window.setInterval(() => {
+    countdownInterval = window.setInterval(async () => {
         for (const [workshopId, info] of Object.entries(workshopStatusCache.value)) {
             if (info.isStop === true && info.stopSeconds > 0) {
                 info.stopSeconds--;
@@ -90,11 +134,14 @@ function startCountdown() {
                     info.updateTime = new Date().toLocaleString();
                     // 发送到服务器
                     if (ws && ws.readyState === WebSocket.OPEN) {
+                        const localInfo = await getLocalInfo();
                         const updateData = {
                             workshopId: workshopId,
                             isStop: true,
                             stopMinutes: 0,
-                            reportTime: info.updateTime
+                            reportTime: info.updateTime,
+                            hostname: localInfo.hostname,
+                            macAddress: localInfo.macAddress
                         };
                         ws.send(JSON.stringify(updateData));
                     }
@@ -105,7 +152,7 @@ function startCountdown() {
 }
 
 // 上报当前车间停机状态
-function reportStatus() {
+async function reportStatus() {
     // 检查连接状态
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         alert('⚠️ 服务器未连接，请稍等或刷新页面！');
@@ -127,63 +174,56 @@ function reportStatus() {
     // 将分钟转换为秒数
     const seconds = minutes * 60;
     
+    // 获取本机信息
+    const localInfo = await getLocalInfo();
+    
     // 构造上报数据
     const reportData = {
         workshopId: currentReportWorkshop.value,
-        isStop: true, // 默认上报停机
+        isStop: true,
         stopMinutes: minutes,
-        reportTime: new Date().toLocaleString()
+        reportTime: new Date().toLocaleString(),
+        hostname: localInfo.hostname,
+        macAddress: localInfo.macAddress
     };
 
-    // 发送数据到n8n
+    // 发送数据到服务端，等待广播更新
     ws.send(JSON.stringify(reportData));
     
-    // 友好提示
-    const tipMsg = `✅ 上报成功！\n车间：${getDisplayName(currentReportWorkshop.value)}\n今日计划停机\n剩余时长：${minutes}分钟（${seconds}秒）\n时间：${reportData.reportTime}`;
+    // 友好提示（仅表示已发送，实际状态等广播）
+    const tipMsg = `✅ 已提交！\n车间：${getDisplayName(currentReportWorkshop.value)}\n今日计划停机\n剩余时长：${minutes}分钟（${seconds}秒）\n时间：${reportData.reportTime}`;
     alert(tipMsg);
-    
-    // 本地实时更新看板（无需等广播）
-    workshopStatusCache.value[currentReportWorkshop.value] = {
-        isStop: true,
-        stopSeconds: seconds,
-        updateTime: reportData.reportTime
-    };
 
     // 重置表单
     stopMinutes.value = 0;
-    
-    // 重新启动倒计时
-    startCountdown();
 }
 
 // 上报已开机状态
-function reportStart() {
+async function reportStart() {
     // 检查连接状态
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         alert('⚠️ 服务器未连接，请稍等或刷新页面！');
         return;
     }
 
+    // 获取本机信息
+    const localInfo = await getLocalInfo();
+    
     // 构造上报数据
     const reportData = {
         workshopId: currentReportWorkshop.value,
         isStop: false,
         stopMinutes: 0,
-        reportTime: new Date().toLocaleString()
+        reportTime: new Date().toLocaleString(),
+        hostname: localInfo.hostname,
+        macAddress: localInfo.macAddress
     };
 
-    // 发送数据到n8n
+    // 发送数据到服务端，等待广播更新
     ws.send(JSON.stringify(reportData));
     
-    // 友好提示
-    alert(`✅ 上报成功！\n车间：${getDisplayName(currentReportWorkshop.value)}\n已开机恢复生产\n时间：${reportData.reportTime}`);
-    
-    // 本地实时更新看板（无需等广播）
-    workshopStatusCache.value[currentReportWorkshop.value] = {
-        isStop: false,
-        stopSeconds: 0,
-        updateTime: reportData.reportTime
-    };
+    // 友好提示（仅表示已发送，实际状态等广播）
+    alert(`✅ 已提交！\n车间：${getDisplayName(currentReportWorkshop.value)}\n已开机恢复生产\n时间：${reportData.reportTime}`);
 }
 
 // 生命周期钩子
