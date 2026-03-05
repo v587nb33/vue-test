@@ -38,8 +38,15 @@ function getDisplayName(code: string): string {
     return `生产线${code}`;
 }
 
+// 本机信息接口
+interface LocalInfo {
+    hostname: string;
+    macAddress: string;
+    ipAddress: string;
+}
+
 // 获取本机信息（IP地址）
-async function getLocalInfo() {
+async function getLocalInfo(): Promise<LocalInfo> {
     const hostname = window.location.hostname;
     let macAddress = 'unknown';
     
@@ -50,7 +57,7 @@ async function getLocalInfo() {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         
-        return new Promise((resolve) => {
+        return new Promise<LocalInfo>((resolve) => {
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
                     const match = event.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
