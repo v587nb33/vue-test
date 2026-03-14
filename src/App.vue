@@ -71,13 +71,13 @@ function startCountdown() {
     countdownInterval = window.setInterval(() => {
         for (const [workshopId, info] of Object.entries(workshopStatusCache.value)) {
             if (info.isStop === true && info.stopMinutes > 0) {
-                info.stopSeconds++;
-                // 当秒数达到60时，分钟减1，秒数归零
-                if (info.stopSeconds >= 60) {
-                    info.stopSeconds = 0;
+                info.stopSeconds--;
+                // 当秒数达到-1时，分钟减1，秒数归59
+                if (info.stopSeconds < 0) {
+                    info.stopSeconds = 59;
                     info.stopMinutes--;
                     // 当倒计时结束时，标记为已停机
-                    if (info.stopMinutes === 0) {
+                    if (info.stopMinutes === 0 && info.stopSeconds === 0) {
                         info.updateTime = new Date().toLocaleString();
                         // 发送到服务器
                         if (ws && ws.readyState === WebSocket.OPEN) {
