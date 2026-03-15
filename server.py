@@ -15,12 +15,13 @@ logging.basicConfig(
 
 # 从环境变量读取MySQL数据库配置
 DB_CONFIG = {
-    'host': os.environ.get('MYSQL_HOST', '远程MySQL服务器IP'),  # 数据库主机
-    'user': os.environ.get('MYSQL_USER', 'root'),  # 数据库用户
-    'password': os.environ.get('MYSQL_PASSWORD', 'password'),  # 数据库密码
+    'host': os.environ.get('MYSQL_HOST', 'mysql'),  # 数据库主机（容器网络中的mysql服务）
+    'user': os.environ.get('MYSQL_USER', 'workshop_user'),  # 数据库用户
+    'password': os.environ.get('MYSQL_PASSWORD', 'workshop_password'),  # 数据库密码
     'db': os.environ.get('MYSQL_DATABASE', 'workshop_db'),  # 数据库名称
     'charset': 'utf8mb4',
-    'cursorclass': pymysql.cursors.DictCursor
+    'cursorclass': pymysql.cursors.DictCursor,
+    'connect_timeout': 30  # 连接超时设置
 }
 
 connected_clients: Set[WebSocketServerProtocol] = set()

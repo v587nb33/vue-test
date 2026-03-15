@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 
-// 核心配置：替换为你的服务器局域网IP
-// 开发环境使用本机IP，生产环境（Docker）直接连接后端
-const WS_URL = 'ws://' + window.location.hostname + ':5680/ws';
+// WebSocket配置
+// 生产环境（Docker）通过Nginx代理连接到后端
+const WS_URL = 'ws://' + window.location.hostname + '/ws';
 // 初始化8个生产线列表（可根据实际名称修改）
 const allWorkshops = [
     "A", "B", "C", "D",

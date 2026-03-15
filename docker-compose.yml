@@ -1,15 +1,37 @@
 version: '3.8'
 
 services:
+  # MySQL数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: workshop_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: workshop_db
+      MYSQL_USER: workshop_user
+      MYSQL_PASSWORD: workshop_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
   # 前端服务（Nginx + 前端静态文件）
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
     ports:
-      - "8080:80"
+      - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - app-network
@@ -21,17 +43,26 @@ services:
       dockerfile: Dockerfile.backend
     ports:
       - "5680:5680"
-    env_file:
-      - .env
     environment:
-      - MYSQL_HOST=${MYSQL_HOST:-远程MySQL服务器IP}
-      - MYSQL_USER=${MYSQL_USER:-root}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-password}
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-workshop_db}
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=workshop_user
+      - MYSQL_PASSWORD=workshop_password
+      - MYSQL_DATABASE=workshop_db
+    depends_on:
+      mysql:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  mysql_data:
